@@ -2,3 +2,9 @@ imgs/person
 class_images/
 lora-dreambooyh-model
 work_dirs/
+spins/
+*.pyc
+data/
+output/
+lora_pic/
+tools/

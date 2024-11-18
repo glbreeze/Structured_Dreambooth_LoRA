@@ -65,7 +65,6 @@ from diffusers.utils.hub_utils import load_or_create_model_card, populate_model_
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
 
-
 if is_wandb_available():
     import wandb
 
@@ -76,13 +75,13 @@ logger = get_logger(__name__)
 
 
 def save_model_card(
-    repo_id: str,
-    images=None,
-    base_model=str,
-    train_text_encoder=False,
-    prompt=str,
-    repo_folder=None,
-    pipeline: DiffusionPipeline = None,
+        repo_id: str,
+        images=None,
+        base_model=str,
+        train_text_encoder=False,
+        prompt=str,
+        repo_folder=None,
+        pipeline: DiffusionPipeline = None,
 ):
     img_str = ""
     for i, image in enumerate(images):
@@ -117,13 +116,13 @@ LoRA for the text encoder was enabled: {train_text_encoder}.
 
 
 def log_validation(
-    pipeline,
-    args,
-    accelerator,
-    pipeline_args,
-    epoch,
-    torch_dtype,
-    is_final_validation=False,
+        pipeline,
+        args,
+        accelerator,
+        pipeline_args,
+        epoch,
+        torch_dtype,
+        is_final_validation=False,
 ):
     logger.info(
         f"Running validation... \n Generating {args.num_validation_images} images with prompt:"
@@ -150,9 +149,13 @@ def log_validation(
 
     if args.validation_images is None:
         images = []
-        for _ in range(args.num_validation_images):
+        validation_prompts = []
+        for idx in range(args.num_validation_images):
             with torch.cuda.amp.autocast():
-                image = pipeline(**pipeline_args, generator=generator).images[0]
+                orientation = 10 + (360 // args.num_validation_images) * idx
+                validation_prompt = args.validation_prompt + f" viewed at a {orientation}-degree counterclockwise angle from the front"
+                validation_prompts.append(validation_prompt)
+                image = pipeline(**{"prompt": validation_prompt}, generator=generator).images[0]
                 images.append(image)
     else:
         images = []
@@ -171,7 +174,7 @@ def log_validation(
             tracker.log(
                 {
                     phase_name: [
-                        wandb.Image(image, caption=f"{i}: {args.validation_prompt}") for i, image in enumerate(images)
+                        wandb.Image(image, caption=f"{i}: {validation_prompts[i]}") for i, image in enumerate(images)
                     ]
                 }
             )
@@ -555,18 +558,18 @@ class DreamBoothDataset(Dataset):
     """
 
     def __init__(
-        self,
-        instance_data_root,
-        instance_prompt,
-        tokenizer,
-        class_data_root=None,
-        class_prompt=None,
-        class_num=None,
-        size=512,
-        center_crop=False,
-        encoder_hidden_states=None,
-        class_prompt_encoder_hidden_states=None,
-        tokenizer_max_length=None,
+            self,
+            instance_data_root,
+            instance_prompt,
+            tokenizer,
+            class_data_root=None,
+            class_prompt=None,
+            class_num=None,
+            size=512,
+            center_crop=False,
+            encoder_hidden_states=None,
+            class_prompt_encoder_hidden_states=None,
+            tokenizer_max_length=None,
     ):
         self.size = size
         self.center_crop = center_crop
@@ -611,7 +614,8 @@ class DreamBoothDataset(Dataset):
 
     def __getitem__(self, index):
         example = {}
-        instance_image = Image.open(self.instance_images_path[index % self.num_instance_images])
+        image_path = self.instance_images_path[index % self.num_instance_images]
+        instance_image = Image.open(image_path)
         instance_image = exif_transpose(instance_image)
 
         if not instance_image.mode == "RGB":
@@ -621,8 +625,12 @@ class DreamBoothDataset(Dataset):
         if self.encoder_hidden_states is not None:
             example["instance_prompt_ids"] = self.encoder_hidden_states
         else:
+            orientation = int(image_path.name.split('.')[0])
+            instance_prompt = self.instance_prompt + f" viewed at a {orientation}-degree counterclockwise angle from the front"
             text_inputs = tokenize_prompt(
-                self.tokenizer, self.instance_prompt, tokenizer_max_length=self.tokenizer_max_length
+                self.tokenizer,
+                instance_prompt,
+                tokenizer_max_length=self.tokenizer_max_length
             )
             example["instance_prompt_ids"] = text_inputs.input_ids
             example["instance_attention_mask"] = text_inputs.attention_mask
@@ -819,7 +827,7 @@ def main(args):
             pipeline.to(accelerator.device)
 
             for example in tqdm(
-                sample_dataloader, desc="Generating class images", disable=not accelerator.is_local_main_process
+                    sample_dataloader, desc="Generating class images", disable=not accelerator.is_local_main_process
             ):
                 images = pipeline(example["prompt"]).images
 
@@ -1016,7 +1024,7 @@ def main(args):
 
     if args.scale_lr:
         args.learning_rate = (
-            args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
+                args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
     # Make sure the trainable params are in float32.
